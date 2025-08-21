@@ -40,6 +40,20 @@
             // 1. Setup Three.js Scene
             setupThreeJS();
 
+            // 1.5 Use the texture loader to set the scene background
+    const backgroundTextureLoader = new THREE.TextureLoader();
+    backgroundTextureLoader.load(
+        './dancepanda.png', // The same path you are testing
+        (texture) => {
+            scene.background = texture;
+            console.log('Background texture loaded and set.');
+        },
+        undefined, // onProgress callback not needed
+        (err) => {
+            console.error('Error loading background texture:', err);
+        }
+    );
+
             // 2. Setup Matter.js World
             setupMatterJS();
 
@@ -50,7 +64,7 @@
             createPhysicsSkeleton();
 
             // 5. Map physics bodies to the mesh's vertices
-            mapPhysicsToMesh();
+            //mapPhysicsToMesh();
             
             // 6. Add mouse controls for interactivity
             addMouseControl();
@@ -96,46 +110,48 @@
         }
 
         function createCharacterMesh() {
-            // FIX: The SVGLoader needs a full SVG XML string to parse, not just the path data.
-            // We wrap the path data in the necessary tags.
+            // The SVGLoader needs a full SVG XML string to parse.
             const fullSvgString = `
                 <svg version="1.1" xmlns="http://www.w3.org/2000/svg">
                     <path d="${svgPathData}" />
                 </svg>
             `;
             
-            // Load the SVG data to create a Three.js shape
             const loader = new THREE.SVGLoader();
             const svgData = loader.parse(fullSvgString);
             const svgPath = svgData.paths[0];
             const shape = THREE.SVGLoader.createShapes(svgPath)[0];
-
-            // Create geometry from the shape
             const geometry = new THREE.ShapeGeometry(shape);
             
-            // Center and scale the geometry
             geometry.center();
-            geometry.scale(PANDA_SCALE, -PANDA_SCALE, PANDA_SCALE); // Flip Y-axis to match texture
+            geometry.scale(PANDA_SCALE, -PANDA_SCALE, PANDA_SCALE);
 
-            // Load the PNG texture
+            // Load the texture and create the mesh inside the callback
             const textureLoader = new THREE.TextureLoader();
-            const texture = textureLoader.load(
+            textureLoader.load(
                 './dancepanda.png',
-                () => { console.log("Texture loaded successfully."); },
-                undefined,
-                (err) => { console.error('Error loading texture:', err); }
-            );
-            
-            // Create the material with the texture
-            const material = new THREE.MeshBasicMaterial({
-                map: texture,
-                transparent: true,
-                side: THREE.DoubleSide
-            });
 
-            // Create the final mesh and add it to the scene
-            characterMesh = new THREE.Mesh(geometry, material);
-            scene.add(characterMesh);
+                // This function runs only AFTER the texture is loaded
+                (texture) => {
+                    console.log("Texture loaded successfully for mesh.");
+
+                    const material = new THREE.MeshBasicMaterial({
+                        map: texture,
+                        transparent: true,
+                        side: THREE.DoubleSide
+                    });
+
+                    characterMesh = new THREE.Mesh(geometry, material);
+                    scene.add(characterMesh);
+
+                    // CRITICAL FIX: Call the mapping function only AFTER the mesh exists.
+                    mapPhysicsToMesh();
+                },
+                undefined,
+                (err) => { 
+                    console.error('An error occurred loading the texture for the mesh:', err); 
+                }
+            );
         }
 
         function createPhysicsSkeleton() {
@@ -267,8 +283,9 @@
                     positionAttribute.setY(link.vertexIndex, localY);
                 });
 
-                // IMPORTANT: Tell Three.js that the vertices have been updated
+                // IMPORTANT: Tell Three.js that the vertices AND texture mapping have been updated
                 positionAttribute.needsUpdate = true;
+                characterMesh.geometry.uvsNeedUpdate = true;
             }
 
             // Render the scene
