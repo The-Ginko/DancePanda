@@ -183,7 +183,7 @@
             const bodies = bodyPoints.map(p => 
                 Matter.Bodies.circle(
                     window.innerWidth / 2 + p[0], 
-                    window.innerHeight / 2 - p[1],
+                    window.innerHeight / 2 + p[1], // --- FIX: Use standard coordinates ---
                     p[2], 
                     bodyOptions
                 )
@@ -220,8 +220,10 @@
 
                 // Find the three closest physics bodies to this vertex
                 const sortedBodies = physicsBodies.map(body => {
-                    const bodyX = body.position.x - window.innerWidth / 2;
-                    const bodyY = -(body.position.y - window.innerHeight / 2);
+                    // --- FIX: Scale the body's position to match the mesh's world units ---
+                    const bodyX = (body.position.x - window.innerWidth / 2) / PANDA_SCALE;
+                    const bodyY = -(body.position.y - window.innerHeight / 2) / PANDA_SCALE;
+                    
                     const distance = Math.hypot(x - bodyX, y - bodyY);
                     return { body, distance };
                 }).sort((a, b) => a.distance - b.distance);
@@ -292,10 +294,14 @@
                         totalDy += dy * weight;
                     });
 
-                    // Apply the total displacement to the vertex's original position
-                    // The 'totalDy' is negated to convert from Matter.js screen space (Y-down) to Three.js world space (Y-up)
-                    positionAttribute.setX(mapping.vertexIndex, mapping.originalPos.x + totalDx);
-                    positionAttribute.setY(mapping.vertexIndex, mapping.originalPos.y - totalDy);
+                    // --- FIX: Convert displacement from pixels to Three.js units before applying ---
+                    const displacementX = totalDx / PANDA_SCALE;
+                    const displacementY = totalDy / PANDA_SCALE;
+
+                    // Apply the correctly scaled displacement to the vertex's original position
+                    // The 'displacementY' is negated to convert from Matter.js screen space (Y-down) to Three.js world space (Y-up)
+                    positionAttribute.setX(mapping.vertexIndex, mapping.originalPos.x + displacementX);
+                    positionAttribute.setY(mapping.vertexIndex, mapping.originalPos.y - displacementY);
                 });
 
                 positionAttribute.needsUpdate = true;
