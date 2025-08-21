@@ -15,7 +15,7 @@
     <!-- SVGLoader is an add-on and must be included separately -->
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/SVGLoader.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/matter-js/0.18.0/matter.min.js"></script>
-
+    <script src="./pandaPath.js"></script>
     <script>
         // --- Core Components ---
         let scene, camera, renderer;
@@ -27,10 +27,7 @@
         // --- Constants ---
         const PANDA_SCALE = 4; // Adjust this to change the size of the panda
 
-        // --- SVG Path Data ---
-        // Extracted from the 'd' attribute of the <path> element in your SVG file.
-        const svgPathData = "m 1181.0001,1914.914 c -61.8278,6.5067 -133.2425,-16.8347 -123.0002,-91.517 1.667,-16.6711 -3.41,-40.9534 1.9712,-52.5426 -3.3561,-7.3825 -3.5403,-37.6818 -2.3995,-28.631 1.2914,-21.6673 -24.4169,-40.3691 -47.5721,-28.204 -19.02642,7.4365 -41.39891,9.1294 -60.98466,11.1276 -23.66884,-1.104 -52.41358,-4.6319 -74.7756,-19.25 -23.37344,-13.6771 -50.23973,-51.8758 -80.0814,-29.1004 -22.48728,35.6322 -29.54348,91.0306 -79.24481,99.3342 -50.51162,15.2114 -109.30875,7.6298 -156.46699,-12.8517 -49.95842,-15.9276 -105.30498,-45.5209 -118.4097,-99.5717 1.43734,-14.1801 10.061,-37.6415 22.8141,-53.6226 17.17054,-13.4313 35.52474,-16.549 45.3933,-33.8525 1.85618,-17.3721 -4.39226,-35.502 -2.9925,-45.0856 2.06854,-7.9242 0.0186,-23.2034 3.8846,-37.37 10.94432,-15.806 2.16454,-41.3124 4.40166,-41.1311 6.1427,-8.3097 6.11184,-29.0161 14.45924,-37.2486 0.94419,-8.572 11.38563,-25.0449 15.2344,-38.8807 6.93347,-9.0452 23.84422,-46.2494 18.26857,-37.3526 12.45418,-6.1932 18.89384,-27.6996 33.22383,-39.8731 15.21883,-19.9591 40.09237,-29.6301 48.372,-58.6714 15.70577,-32.6056 34.45836,-78.2493 17.03989,-109.4205 -4.41199,-16.5372 -2.41959,-23.0482 -12.04909,-34.8571 -6.85923,-15.5906 -3.74989,-26.3049 -22.0896,-25.1235 -24.75954,-12.0998 -42.59424,-37.5327 -67.6782,-47.4436 -29.49148,-16.665 -45.48409,-47.83465 -75.4785,-65.43874 -31.46147,-23.18385 -45.0566,-62.76298 -73.8718,-88.3854 -17.97024,-43.28595 -36.15062,-91.49235 -64.1299,-132.2729 -30.34624,-25.76543 -34.55328,-64.83093 -52.3077,-96.95643 1.05406,-12.30613 -13.49193,-64.31337 -6.4594,-46.23507 3.44359,-22.91831 9.54813,-40.71752 19.1066,-62.83903 11.75878,-8.33538 34.5139,-35.45451 25.7493,-34.2849 13.36345,-20.64578 37.72771,-37.17443 65.1512,-32.66299 38.01995,-61.0237 49.04616,-140.42519 80.9895,-207.03854 -1.29366,-34.25397 41.01772,-106.22532 66.919,-49.52447 -25.98337,88.83207 -60.09116,174.77779 -87.9685,262.93417 30.59027,21.62119 50.78437,56.65516 50.0724,95.07673 15.87656,31.77163 46.96091,52.21761 73.255,72.21165 18.09466,12.26713 28.75378,21.60018 41.1517,25.89998 17.5453,13.06896 16.58917,-9.78638 29.383,10.63843 19.84063,21.73525 18.44554,9.52994 31.8961,-0.56989 4.93481,-8.74964 28.18447,11.3283 26.8972,-13.08711 8.17657,-52.10724 41.89712,-93.30658 65.73472,-138.08173 -14.78689,-16.76349 -39.19053,-30.60717 -44.91702,-53.24602 -7.66853,-19.93284 -3.61911,-44.93604 6.553,-63.04903 18.01166,-43.19082 55.942,-80.17916 102.4768,-90.0043 10.89219,0.1449 20.24995,-4.96793 33.4447,-2.153 34.16837,9.23648 57.03617,39.18444 67.4626,71.43982 51.23523,-5.97518 109.03766,-16.16142 161.56926,0.31504 29.7072,0.26741 55.2663,33.86954 79.9211,32.09041 20.8974,-53.05712 97.6426,-65.53359 136.9359,-27.77158 30.339,30.99767 60.2199,71.63763 51.0744,117.8673 0.4467,18.34496 -5.2253,26.74238 -8.3533,39.58184 -6.7606,24.04415 -40.0702,28.06478 -54.5776,40.66816 4.504,43.36887 21.6935,95.454 23.0575,143 8.5647,11.87337 11.5803,11.65497 28.139,13.28375 12.9412,-14.79854 23.2177,8.49402 19.3006,1.71623 9.2027,-4.8613 24.2363,-18.94266 38.4869,-19.75 12.3246,-4.42249 35.083,-8.50247 27.1598,-10.83928 13.4145,-16.84973 45.3841,-26.64649 61.178,-48.80875 21.1424,-27.4112 7.0494,-74.13682 45.7121,-93.70349 42.0122,-54.2202 -21.3756,-144.47107 -15.0191,-213.65244 -28.1519,-36.35344 1.4764,-127.30846 37.9916,-62.74604 19.158,86.9341 30.1581,176.16902 52.6651,261.8029 30.8323,5.67329 57.6556,27.06816 72.9761,54.35835 8.2255,2.76988 20.7077,34.65923 14.7959,25.42899 2.6767,-2.19964 16.1186,16.33871 7.6496,31.84805 3.3758,2.20661 11.2035,32.14051 8.021,27.06171 5.6351,10.54683 -25.5602,66.70024 -9.9039,42.35871 6.9751,7.27291 -18.5971,36.40693 -10.2467,28.64129 -8.3589,15.2201 -11.3242,31.50319 -26.4645,46.56667 -19.7997,28.27229 -33.6401,57.32471 -51.5674,86.43331 -6.061,21.35168 -25.036,34.08708 -32.4326,54 -10.119,26.09738 -36.2188,36.88669 -48.9114,60.68424 -19.307,29.4042 -59.8375,36.8941 -82.9406,62.011 -19.0663,5.1375 -35.0809,16.0649 -48.6785,28.0633 -21.0986,0.1934 -27.6007,11.5802 -37.9695,22.9415 -6.4483,8.2093 -41.7499,9.0908 -35.5,8.3 -0.9486,19.6923 -21.791,28.2686 -13.4998,24.8185 1.5794,11.2288 -4.1961,26.09 -6.5,40.1815 -18.3806,20.4268 0.8109,63.023 0.5376,92 6.2979,48.2221 7.35,103.676 37.351,143 5.8549,15.0618 11.6927,35.9227 19.9246,46.0107 -0.1504,12.761 -2.4585,28.0509 3.818,43.2033 -3.9179,3.4466 4.6007,20.2461 -0.3873,30.0475 -0.6854,5.6594 -5.8654,31.9512 0.5808,26.5077 0.9968,8.0488 -11.8456,26.2911 -1.829,22.394 7.7896,2.6275 -6.876,17.9143 1.3515,25.6395 -3.9555,6.9371 3.5898,20.5273 -5.7629,32.1976 -7.2055,9.6247 -5.6336,37.3694 -4.3998,26.9323 -3.1692,12.3227 -4.5827,16.6814 -10.1323,27.4963 -2.2263,8.2771 -3.3726,15.1046 -5.5337,27.1365 -1.9932,9.9395 -9.6153,29.5392 -7.8112,22.6719 4.2004,1.5035 -26.8271,54.8629 -11.2957,33.1851 -7.3958,23.9238 17.8262,91.1945 -27.8968,102.9961 -42.8532,10.4529 -87.0678,11.9799 -131.0122,10.5986 z m 203.7292,-271.6212 c -3.9598,-2.1015 -0.9344,2.2534 0,0 z m -10.7292,-510.8368 c -2.3337,-3.4347 -2.8802,1.9056 0,0 z m 320.7292,-338.16324 c -3.9598,-2.10137 -0.9346,2.25339 0,0 z m -314.7292,-45.89583 c -0.8654,-5.28209 -2.3735,5.24699 0,0 z";
-
+        
 
         // --- Initialization ---
         init();
@@ -241,7 +238,12 @@
                     originalPos: { x, y },
                     influences: closestThree.map((item, index) => ({
                         body: item.body,
-                        weight: weights[index] / totalWeight
+                        weight: weights[index] / totalWeight,
+                        // --- FIX: Store the body's initial position at the time of mapping ---
+                        initialBodyPos: {
+                            x: item.body.position.x,
+                            y: item.body.position.y
+                        }
                     }))
                 });
             }
@@ -270,46 +272,33 @@
             if (characterMesh && vertexMapping.length > 0) {
                 const positionAttribute = characterMesh.geometry.attributes.position;
 
-                // Update each vertex based on its weighted influences
+                // Update each vertex based on the displacement of its influencing bodies
                 vertexMapping.forEach(mapping => {
-                    let newX = 0;
-                    let newY = 0;
+                    let totalDx = 0;
+                    let totalDy = 0;
 
+                    // Calculate the total weighted displacement from all influencing bodies
                     mapping.influences.forEach(influence => {
-                        const bodyPosition = influence.body.position;
+                        const body = influence.body;
                         const weight = influence.weight;
+                        const initialPos = influence.initialBodyPos;
 
-                        const bodyX = bodyPosition.x - window.innerWidth / 2;
-                        const bodyY = -(bodyPosition.y - window.innerHeight / 2);
-                        
-                        // This needs to be relative to the body's starting position, not implemented yet
-                        // For now, let's just apply the weighted position
-                        newX += bodyX * weight;
-                        newY += bodyY * weight;
-                    });
-                    
-                    // This logic is still incomplete but is the correct structure
-                    // A more advanced solution would track the *delta* from the body's original position
-                    
-                    const initialBodyPos = mapping.influences.map(inf => ({
-                        x: inf.body.position.x - window.innerWidth / 2,
-                        y: -(inf.body.position.y - window.innerHeight / 2)
-                    }));
-                    
-                    let dx = 0, dy = 0;
-                    mapping.influences.forEach((inf, i) => {
-                         dx += ( (inf.body.position.x - window.innerWidth / 2) - initialBodyPos[i].x) * inf.weight;
-                         dy += ( (-(inf.body.position.y - window.innerHeight / 2)) - initialBodyPos[i].y) * inf.weight;
+                        // Calculate the displacement (delta) for this one body in screen coordinates
+                        const dx = body.position.x - initialPos.x;
+                        const dy = body.position.y - initialPos.y;
+
+                        // Add the weighted displacement to the total
+                        totalDx += dx * weight;
+                        totalDy += dy * weight;
                     });
 
-
-                    positionAttribute.setX(mapping.vertexIndex, mapping.originalPos.x + dx);
-                    positionAttribute.setY(mapping.vertexIndex, mapping.originalPos.y + dy);
+                    // Apply the total displacement to the vertex's original position
+                    // The 'totalDy' is negated to convert from Matter.js screen space (Y-down) to Three.js world space (Y-up)
+                    positionAttribute.setX(mapping.vertexIndex, mapping.originalPos.x + totalDx);
+                    positionAttribute.setY(mapping.vertexIndex, mapping.originalPos.y - totalDy);
                 });
 
-
                 positionAttribute.needsUpdate = true;
-                // uvsNeedUpdate is not needed every frame if they are generated correctly once.
             }
 
             renderer.render(scene, camera);
