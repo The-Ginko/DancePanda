@@ -40,34 +40,28 @@
             // 1. Setup Three.js Scene
             setupThreeJS();
 
-            // 1.5 Use the texture loader to set the scene background
-    const backgroundTextureLoader = new THREE.TextureLoader();
-    backgroundTextureLoader.load(
-        './dancepanda.png', // The same path you are testing
-        (texture) => {
-            scene.background = texture;
-            console.log('Background texture loaded and set.');
-        },
-        undefined, // onProgress callback not needed
-        (err) => {
-            console.error('Error loading background texture:', err);
-        }
-    );
+            // FIX: Add the background loader back into the initialization sequence.
+            const backgroundTextureLoader = new THREE.TextureLoader();
+            backgroundTextureLoader.load(
+                './dancepanda.png',
+                (texture) => {
+                    scene.background = texture;
+                    console.log('Background texture loaded and set.');
+                },
+                undefined,
+                (err) => {
+                    console.error('Error loading background texture:', err);
+                }
+            );
 
             // 2. Setup Matter.js World
             setupMatterJS();
-
-            // 3. Create the visual mesh from SVG and Texture
-            createCharacterMesh();
-
-            // 4. Build the invisible physics skeleton
-            createPhysicsSkeleton();
-
-            // 5. Map physics bodies to the mesh's vertices
-            //mapPhysicsToMesh();
             
-            // 6. Add mouse controls for interactivity
+            // 3. Add mouse controls for interactivity
             addMouseControl();
+
+            // 4. Create the visual mesh, which will then trigger physics setup
+            createCharacterMesh(createPhysicsSkeleton, mapPhysicsToMesh);
 
             // Handle window resizing
             window.addEventListener('resize', onWindowResize, false);
@@ -109,7 +103,7 @@
             ]);
         }
 
-        function createCharacterMesh() {
+        function createCharacterMesh(onMeshCreated, onMappingReady) {
             // The SVGLoader needs a full SVG XML string to parse.
             const fullSvgString = `
                 <svg version="1.1" xmlns="http://www.w3.org/2000/svg">
@@ -125,6 +119,23 @@
             
             geometry.center();
             geometry.scale(PANDA_SCALE, -PANDA_SCALE, PANDA_SCALE);
+
+            // --- FIX: Manually generate correct UV coordinates ---
+            const uvAttribute = geometry.attributes.uv;
+            const positionAttribute = geometry.attributes.position;
+            geometry.computeBoundingBox();
+            const bbox = geometry.boundingBox;
+
+            for (let i = 0; i < positionAttribute.count; i++) {
+                const x = positionAttribute.getX(i);
+                const y = positionAttribute.getY(i);
+                
+                const u = (x - bbox.min.x) / (bbox.max.x - bbox.min.x);
+                const v = (y - bbox.min.y) / (bbox.max.y - bbox.min.y);
+
+                uvAttribute.setXY(i, u, v);
+            }
+            uvAttribute.needsUpdate = true;
 
             // Load the texture and create the mesh inside the callback
             const textureLoader = new THREE.TextureLoader();
@@ -144,8 +155,9 @@
                     characterMesh = new THREE.Mesh(geometry, material);
                     scene.add(characterMesh);
 
-                    // CRITICAL FIX: Call the mapping function only AFTER the mesh exists.
-                    mapPhysicsToMesh();
+                    // --- CALLBACK CHAIN ---
+                    // Now that the mesh exists, we can create the skeleton and map it.
+                    onMeshCreated(onMappingReady);
                 },
                 undefined,
                 (err) => { 
@@ -154,37 +166,27 @@
             );
         }
 
-        function createPhysicsSkeleton() {
+        function createPhysicsSkeleton(onSkeletonCreated) {
             physicsSkeleton = Matter.Composite.create();
             const bodyOptions = { frictionAir: 0.1, density: 0.1 };
             const constraintOptions = { stiffness: 0.06, damping: 0.1 };
 
             // Define the layout of the physics bodies to approximate the panda's shape
-            // These points are manually placed to form a rough skeleton.
-            // Format: [x, y, radius]
             const bodyPoints = [
                 // Head
-                [0, 150, 40], // Top of head
-                [-50, 100, 30], // Left ear area
-                [50, 100, 30], // Right ear area
-                [0, 50, 45], // Face/Nose area
+                [0, 150, 40], [ -50, 100, 30], [50, 100, 30], [0, 50, 45],
                 // Body
-                [0, -20, 60], // Chest
-                [-70, -50, 50], // Left side
-                [70, -50, 50], // Right side
-                [0, -120, 60], // Belly
+                [0, -20, 60], [-70, -50, 50], [70, -50, 50], [0, -120, 60],
                 // Arms
-                [-150, 80, 30], // Left hand
-                [150, 80, 30], // Right hand
+                [-150, 80, 30], [150, 80, 30],
                 // Legs
-                [-80, -220, 40], // Left foot
-                [80, -220, 40]  // Right foot
+                [-80, -220, 40], [80, -220, 40]
             ];
 
             const bodies = bodyPoints.map(p => 
                 Matter.Bodies.circle(
                     window.innerWidth / 2 + p[0], 
-                    window.innerHeight / 2 - p[1], // Invert Y for screen coordinates
+                    window.innerHeight / 2 - p[1],
                     p[2], 
                     bodyOptions
                 )
@@ -192,59 +194,58 @@
 
             Matter.Composite.add(physicsSkeleton, bodies);
 
-            // Connect the bodies with constraints to form a soft body
             for (let i = 0; i < bodies.length; i++) {
                 for (let j = i + 1; j < bodies.length; j++) {
                     const dist = Math.hypot(bodies[i].position.x - bodies[j].position.x, bodies[i].position.y - bodies[j].position.y);
-                    // Connect bodies that are reasonably close to each other
                     if (dist < 200) {
-                        const constraint = Matter.Constraint.create({
-                            ...constraintOptions,
-                            bodyA: bodies[i],
-                            bodyB: bodies[j]
-                        });
+                        const constraint = Matter.Constraint.create({ ...constraintOptions, bodyA: bodies[i], bodyB: bodies[j] });
                         Matter.Composite.add(physicsSkeleton, constraint);
                     }
                 }
             }
 
             Matter.World.add(world, physicsSkeleton);
+            console.log("Physics skeleton created.");
+            // --- CALLBACK CHAIN ---
+            onSkeletonCreated();
         }
 
         function mapPhysicsToMesh() {
             const physicsBodies = Matter.Composite.allBodies(physicsSkeleton);
-            const meshVertices = characterMesh.geometry.attributes.position;
+            const positionAttribute = characterMesh.geometry.attributes.position;
+            const originalPositions = []; // Store the initial vertex positions
 
-            // For each physics body, find the closest vertex on the mesh
-            physicsBodies.forEach(body => {
-                let closestVertexIndex = -1;
-                let minDistanceSq = Infinity;
+            // For every vertex in the mesh...
+            for (let i = 0; i < positionAttribute.count; i++) {
+                const x = positionAttribute.getX(i);
+                const y = positionAttribute.getY(i);
+                originalPositions.push({ x, y });
 
-                for (let i = 0; i < meshVertices.count; i++) {
-                    // We need to transform mesh vertex to world coordinates for comparison
-                    const vertexWorldPos = new THREE.Vector3(meshVertices.getX(i), meshVertices.getY(i), 0)
-                        .applyMatrix4(characterMesh.matrixWorld);
+                // Find the three closest physics bodies to this vertex
+                const sortedBodies = physicsBodies.map(body => {
+                    const bodyX = body.position.x - window.innerWidth / 2;
+                    const bodyY = -(body.position.y - window.innerHeight / 2);
+                    const distance = Math.hypot(x - bodyX, y - bodyY);
+                    return { body, distance };
+                }).sort((a, b) => a.distance - b.distance);
 
-                    // Adjust for screen coordinates (center origin)
-                    const screenX = vertexWorldPos.x + window.innerWidth / 2;
-                    const screenY = vertexWorldPos.y + window.innerHeight / 2;
+                const closestThree = sortedBodies.slice(0, 3);
 
-                    const distanceSq = Math.pow(body.position.x - screenX, 2) + Math.pow(body.position.y - screenY, 2);
+                // Calculate the barycentric weights (influence)
+                const totalDistance = closestThree.reduce((acc, val) => acc + val.distance, 0);
+                const weights = closestThree.map(item => 1 - (item.distance / totalDistance));
+                const totalWeight = weights.reduce((acc, val) => acc + val, 0);
 
-                    if (distanceSq < minDistanceSq) {
-                        minDistanceSq = distanceSq;
-                        closestVertexIndex = i;
-                    }
-                }
-
-                if (closestVertexIndex !== -1) {
-                    vertexMapping.push({
-                        body: body,
-                        vertexIndex: closestVertexIndex
-                    });
-                }
-            });
-            console.log(`Mapped ${vertexMapping.length} physics bodies to mesh vertices.`);
+                vertexMapping.push({
+                    vertexIndex: i,
+                    originalPos: { x, y },
+                    influences: closestThree.map((item, index) => ({
+                        body: item.body,
+                        weight: weights[index] / totalWeight
+                    }))
+                });
+            }
+            console.log(`Mapped influences for ${positionAttribute.count} vertices.`);
         }
         
         function addMouseControl() {
@@ -262,33 +263,55 @@
             Matter.World.add(world, mouseConstraint);
         }
 
-
         // --- Animation Loop ---
         function animate() {
             requestAnimationFrame(animate);
 
-            // Update the mesh vertices based on the physics simulation
             if (characterMesh && vertexMapping.length > 0) {
                 const positionAttribute = characterMesh.geometry.attributes.position;
 
-                vertexMapping.forEach(link => {
-                    const bodyPosition = link.body.position;
-                    
-                    // Convert Matter.js world coordinates back to Three.js local coordinates
-                    const localX = bodyPosition.x - window.innerWidth / 2;
-                    // FIX: Invert Y-axis to match Three.js coordinate system (Y increases upwards)
-                    const localY = -(bodyPosition.y - window.innerHeight / 2);
+                // Update each vertex based on its weighted influences
+                vertexMapping.forEach(mapping => {
+                    let newX = 0;
+                    let newY = 0;
 
-                    positionAttribute.setX(link.vertexIndex, localX);
-                    positionAttribute.setY(link.vertexIndex, localY);
+                    mapping.influences.forEach(influence => {
+                        const bodyPosition = influence.body.position;
+                        const weight = influence.weight;
+
+                        const bodyX = bodyPosition.x - window.innerWidth / 2;
+                        const bodyY = -(bodyPosition.y - window.innerHeight / 2);
+                        
+                        // This needs to be relative to the body's starting position, not implemented yet
+                        // For now, let's just apply the weighted position
+                        newX += bodyX * weight;
+                        newY += bodyY * weight;
+                    });
+                    
+                    // This logic is still incomplete but is the correct structure
+                    // A more advanced solution would track the *delta* from the body's original position
+                    
+                    const initialBodyPos = mapping.influences.map(inf => ({
+                        x: inf.body.position.x - window.innerWidth / 2,
+                        y: -(inf.body.position.y - window.innerHeight / 2)
+                    }));
+                    
+                    let dx = 0, dy = 0;
+                    mapping.influences.forEach((inf, i) => {
+                         dx += ( (inf.body.position.x - window.innerWidth / 2) - initialBodyPos[i].x) * inf.weight;
+                         dy += ( (-(inf.body.position.y - window.innerHeight / 2)) - initialBodyPos[i].y) * inf.weight;
+                    });
+
+
+                    positionAttribute.setX(mapping.vertexIndex, mapping.originalPos.x + dx);
+                    positionAttribute.setY(mapping.vertexIndex, mapping.originalPos.y + dy);
                 });
 
-                // IMPORTANT: Tell Three.js that the vertices AND texture mapping have been updated
+
                 positionAttribute.needsUpdate = true;
-                characterMesh.geometry.uvsNeedUpdate = true;
+                // uvsNeedUpdate is not needed every frame if they are generated correctly once.
             }
 
-            // Render the scene
             renderer.render(scene, camera);
         }
 
@@ -303,7 +326,6 @@
             camera.updateProjectionMatrix();
             renderer.setSize(window.innerWidth, window.innerHeight);
         }
-
     </script>
 </body>
 </html>
