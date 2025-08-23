@@ -76,7 +76,7 @@
             // Engine
             engine = Matter.Engine.create();
             world = engine.world;
-            world.gravity.y = 1; // A little bit of gravity to make it jiggle
+            world.gravity.y = 0.23; // A little bit of gravity to make it jiggle
 
             // Runner
             runner = Matter.Runner.create();
@@ -124,8 +124,46 @@
     });
 }
 
+        // NEW HELPER FUNCTION: Add this function above your createCharacterMesh function.
+function normalizeSVGPath(pathData) {
+    // This regular expression finds all the coordinate pairs in the path string.
+    const regex = /[-+]?[0-9]*\.?[0-9]+([eE][-+]?[0-9]+)?/g;
+    const coords = pathData.match(regex).map(parseFloat);
+    
+    if (coords.length < 2) {
+        return pathData; // Not enough data to process
+    }
+
+    // Separate the coordinates into x and y arrays.
+    const xCoords = coords.filter((_, i) => i % 2 === 0);
+    const yCoords = coords.filter((_, i) => i % 2 !== 0);
+
+    // Find the bounding box of the path.
+    const minX = Math.min(...xCoords);
+    const maxX = Math.max(...xCoords);
+    const minY = Math.min(...yCoords);
+    const maxY = Math.max(...yCoords);
+
+    // Calculate the center of the bounding box.
+    const centerX = minX + (maxX - minX) / 2;
+    const centerY = minY + (maxY - minY) / 2;
+
+    // Create a new, corrected path string by translating every coordinate.
+    let i = 0;
+    const normalizedPath = pathData.replace(regex, () => {
+        const originalCoord = coords[i];
+        const isX = i % 2 === 0;
+        const translatedCoord = isX ? (originalCoord - centerX) : (originalCoord - centerY);
+        i++;
+        return translatedCoord.toFixed(4); // Keep reasonable precision
+    });
+
+    return normalizedPath;
+}
+
+
 function createCharacterMesh(onMeshCreated, onMappingReady) {
-    // The SVGLoader needs a full SVG XML string to parse.
+    // Create the geometry from the SVG path data.
     const fullSvgString = `
         <svg version="1.1" xmlns="http://www.w3.org/2000/svg">
             <path d="${svgPathData}" />
@@ -137,58 +175,52 @@ function createCharacterMesh(onMeshCreated, onMappingReady) {
     const svgPath = svgData.paths[0];
     const shape = THREE.SVGLoader.createShapes(svgPath)[0];
     const geometry = new THREE.ShapeGeometry(shape);
-    
-    // --- FIX START: DYNAMICALLY SCALE GEOMETRY TO MATCH TEXTURE ASPECT RATIO ---
 
-    // 1. Center the geometry first. This is important for uniform scaling.
+    // Center and scale the geometry to the desired size in the scene.
     geometry.center();
-
-    // 2. Compute the initial bounding box to get the SVG's intrinsic size.
     geometry.computeBoundingBox();
     const bbox = geometry.boundingBox;
-    const geometryWidth = bbox.max.x - bbox.min.x;
-    const geometryHeight = bbox.max.y - bbox.min.y;
-
-    // 3. Define the target size. This should match your texture's dimensions.
-    const targetWidth = 2048;
-    const targetHeight = 2048;
-
-    // 4. Calculate the correct scale factor.
-    //    We'll scale based on height and let width adjust proportionally.
-    const scale = targetHeight / geometryHeight;
-
-    // 5. Apply the calculated scale. Note the negative Y to flip the SVG.
+    const geomHeight = bbox.max.y - bbox.min.y;
+    const targetHeight = 1800; // Adjust for final size
+    const scale = targetHeight / geomHeight;
     geometry.scale(scale, -scale, scale);
+    geometry.computeBoundingBox();
 
-    // --- FIX END ---
-
-
-    // --- FIX: Manually generate correct UV coordinates ---
-    // This part is now done AFTER the geometry is correctly scaled.
-    const uvAttribute = geometry.attributes.uv;
-    const positionAttribute = geometry.attributes.position;
-    geometry.computeBoundingBox(); // Re-compute the bounding box for the scaled geometry
-    const scaledBbox = geometry.boundingBox;
-
-    for (let i = 0; i < positionAttribute.count; i++) {
-        const x = positionAttribute.getX(i);
-        const y = positionAttribute.getY(i);
-        
-        const u = (x - scaledBbox.min.x) / (scaledBbox.max.x - scaledBbox.min.x);
-        const v = (y - scaledBbox.min.y) / (scaledBbox.max.y - scaledBbox.min.y);
-
-        uvAttribute.setXY(i, u, v);
-    }
-    uvAttribute.needsUpdate = true;
-
-    // Load the texture and create the mesh inside the callback
     const textureLoader = new THREE.TextureLoader();
     textureLoader.load(
         './dancepanda.png',
-
-        // This function runs only AFTER the texture is loaded
         (texture) => {
-            console.log("Texture loaded successfully for mesh.");
+            const finalBbox = geometry.boundingBox;
+            const geomWidth = finalBbox.max.x - finalBbox.min.x;
+            const geomHeight = finalBbox.max.y - finalBbox.min.y;
+            const geomAspect = geomWidth / geomHeight;
+            const imageAspect = texture.image.width / texture.image.height;
+
+            const uvAttribute = geometry.attributes.uv;
+            const positionAttribute = geometry.attributes.position;
+
+            for (let i = 0; i < positionAttribute.count; i++) {
+                const x = positionAttribute.getX(i);
+                const y = positionAttribute.getY(i);
+                
+                // Calculate the base UVs.
+                let u = (x - finalBbox.min.x) / geomWidth;
+                let v = (y - finalBbox.min.y) / geomHeight;
+                
+                // --- START: CORRECTED ASPECT RATIO MAPPING ---
+                // This logic correctly scales the UVs to fit the geometry
+                // without leaving margins or causing distortion.
+                if (geomAspect > imageAspect) {
+                    texture.matrix.setUvTransform(0, 0, imageAspect / geomAspect, 1, 0, 0.5, 0.5);
+                } else {
+                    texture.matrix.setUvTransform(0, 0, 1, geomAspect / imageAspect, 0, 0.5, 0.5);
+                }
+                // --- END: CORRECTED ASPECT RATIO MAPPING ---
+
+                uvAttribute.setXY(i, u, v);
+            }
+            uvAttribute.needsUpdate = true;
+
 
             const material = new THREE.MeshBasicMaterial({
                 map: texture,
@@ -198,12 +230,7 @@ function createCharacterMesh(onMeshCreated, onMappingReady) {
 
             characterMesh = new THREE.Mesh(geometry, material);
             scene.add(characterMesh);
-            // --- YELLOW DIAGNOSTIC BOX ---
-            helper = new THREE.BoxHelper( characterMesh, 0xffff00 ); // Creates a yellow box
-            scene.add( helper );
 
-            // --- CALLBACK CHAIN ---
-            // Now that the mesh exists, we can create the skeleton and map it.
             onMeshCreated(onMappingReady);
         },
         undefined,
@@ -350,7 +377,7 @@ function createCharacterMesh(onMeshCreated, onMappingReady) {
                     });
 
                     // --- FIX: Convert displacement from pixels to Three.js units correctly ---
-                    const displacementX = totalDx / pixelsPerThreeUnit;66666666
+                    const displacementX = totalDx / pixelsPerThreeUnit;
                     const displacementY = totalDy / pixelsPerThreeUnit;
 
                     // Apply the correctly scaled displacement to the vertex's original position
