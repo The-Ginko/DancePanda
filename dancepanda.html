@@ -188,7 +188,7 @@ function createCharacterMesh(onMeshCreated, onMappingReady) {
 
     const textureLoader = new THREE.TextureLoader();
     textureLoader.load(
-        './dancepanda.png',
+        './dancepanda_char.png',
         (texture) => {
             const finalBbox = geometry.boundingBox;
             const geomWidth = finalBbox.max.x - finalBbox.min.x;
