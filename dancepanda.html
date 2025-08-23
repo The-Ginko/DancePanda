@@ -23,9 +23,11 @@
         let characterMesh;
         let physicsSkeleton;
         let vertexMapping = [];
+        let pixelsPerThreeUnit; // NEW: To hold the correct conversion rate
+        let helper;             // YELLOW DIAGNOSTIC BOX HELPER
 
         // --- Constants ---
-        const PANDA_SCALE = 4; // Adjust this to change the size of the panda
+        //const PANDA_SCALE = 2.25; // FIX: Drastically reduce the scale
 
         
 
@@ -36,20 +38,7 @@
         function init() {
             // 1. Setup Three.js Scene
             setupThreeJS();
-
-            // FIX: Add the background loader back into the initialization sequence.
-            const backgroundTextureLoader = new THREE.TextureLoader();
-            backgroundTextureLoader.load(
-                './dancepanda.png',
-                (texture) => {
-                    scene.background = texture;
-                    console.log('Background texture loaded and set.');
-                },
-                undefined,
-                (err) => {
-                    console.error('Error loading background texture:', err);
-                }
-            );
+            setupProportionalBackground();
 
             // 2. Setup Matter.js World
             setupMatterJS();
@@ -73,6 +62,9 @@
             const frustumSize = 2000; // This defines the visible area
             camera = new THREE.OrthographicCamera(frustumSize * aspect / -2, frustumSize * aspect / 2, frustumSize / 2, frustumSize / -2, 1, 1000);
             camera.position.z = 500;
+            
+            // FIX: Calculate the true pixel-to-world-unit ratio
+            pixelsPerThreeUnit = window.innerHeight / frustumSize;
 
             // Renderer
             renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
@@ -100,68 +92,126 @@
             ]);
         }
 
-        function createCharacterMesh(onMeshCreated, onMappingReady) {
-            // The SVGLoader needs a full SVG XML string to parse.
-            const fullSvgString = `
-                <svg version="1.1" xmlns="http://www.w3.org/2000/svg">
-                    <path d="${svgPathData}" />
-                </svg>
-            `;
-            
-            const loader = new THREE.SVGLoader();
-            const svgData = loader.parse(fullSvgString);
-            const svgPath = svgData.paths[0];
-            const shape = THREE.SVGLoader.createShapes(svgPath)[0];
-            const geometry = new THREE.ShapeGeometry(shape);
-            
-            geometry.center();
-            geometry.scale(PANDA_SCALE, -PANDA_SCALE, PANDA_SCALE);
+        function setupProportionalBackground() {
+    const textureLoader = new THREE.TextureLoader();
+    textureLoader.load('./dancepanda.png', (texture) => {
+        const screenAspect = window.innerWidth / window.innerHeight;
+        const imageAspect = texture.image.width / texture.image.height;
 
-            // --- FIX: Manually generate correct UV coordinates ---
-            const uvAttribute = geometry.attributes.uv;
-            const positionAttribute = geometry.attributes.position;
-            geometry.computeBoundingBox();
-            const bbox = geometry.boundingBox;
+        // Create a plane geometry that fills the camera's view
+        const frustumHeight = camera.top - camera.bottom;
+        const frustumWidth = frustumHeight * screenAspect;
+        const planeGeo = new THREE.PlaneGeometry(frustumWidth, frustumHeight);
 
-            for (let i = 0; i < positionAttribute.count; i++) {
-                const x = positionAttribute.getX(i);
-                const y = positionAttribute.getY(i);
-                
-                const u = (x - bbox.min.x) / (bbox.max.x - bbox.min.x);
-                const v = (y - bbox.min.y) / (bbox.max.y - bbox.min.y);
+        const planeMat = new THREE.MeshBasicMaterial({ map: texture });
+        const backgroundPlane = new THREE.Mesh(planeGeo, planeMat);
 
-                uvAttribute.setXY(i, u, v);
-            }
-            uvAttribute.needsUpdate = true;
-
-            // Load the texture and create the mesh inside the callback
-            const textureLoader = new THREE.TextureLoader();
-            textureLoader.load(
-                './dancepanda.png',
-
-                // This function runs only AFTER the texture is loaded
-                (texture) => {
-                    console.log("Texture loaded successfully for mesh.");
-
-                    const material = new THREE.MeshBasicMaterial({
-                        map: texture,
-                        transparent: true,
-                        side: THREE.DoubleSide
-                    });
-
-                    characterMesh = new THREE.Mesh(geometry, material);
-                    scene.add(characterMesh);
-
-                    // --- CALLBACK CHAIN ---
-                    // Now that the mesh exists, we can create the skeleton and map it.
-                    onMeshCreated(onMappingReady);
-                },
-                undefined,
-                (err) => { 
-                    console.error('An error occurred loading the texture for the mesh:', err); 
-                }
-            );
+        // Adjust texture repeat and offset to achieve "cover" effect
+        if (screenAspect > imageAspect) {
+            // Screen is wider than the image
+            texture.repeat.set(1, imageAspect / screenAspect);
+            texture.offset.set(0, (1 - imageAspect / screenAspect) / 2);
+        } else {
+            // Screen is taller than the image
+            texture.repeat.set(screenAspect / imageAspect, 1);
+            texture.offset.set((1 - screenAspect / imageAspect) / 2, 0);
         }
+        
+        // Place the plane behind everything else
+        backgroundPlane.position.z = -100; 
+        scene.add(backgroundPlane);
+        console.log('Proportional background created.');
+    });
+}
+
+function createCharacterMesh(onMeshCreated, onMappingReady) {
+    // The SVGLoader needs a full SVG XML string to parse.
+    const fullSvgString = `
+        <svg version="1.1" xmlns="http://www.w3.org/2000/svg">
+            <path d="${svgPathData}" />
+        </svg>
+    `;
+    
+    const loader = new THREE.SVGLoader();
+    const svgData = loader.parse(fullSvgString);
+    const svgPath = svgData.paths[0];
+    const shape = THREE.SVGLoader.createShapes(svgPath)[0];
+    const geometry = new THREE.ShapeGeometry(shape);
+    
+    // --- FIX START: DYNAMICALLY SCALE GEOMETRY TO MATCH TEXTURE ASPECT RATIO ---
+
+    // 1. Center the geometry first. This is important for uniform scaling.
+    geometry.center();
+
+    // 2. Compute the initial bounding box to get the SVG's intrinsic size.
+    geometry.computeBoundingBox();
+    const bbox = geometry.boundingBox;
+    const geometryWidth = bbox.max.x - bbox.min.x;
+    const geometryHeight = bbox.max.y - bbox.min.y;
+
+    // 3. Define the target size. This should match your texture's dimensions.
+    const targetWidth = 2048;
+    const targetHeight = 2048;
+
+    // 4. Calculate the correct scale factor.
+    //    We'll scale based on height and let width adjust proportionally.
+    const scale = targetHeight / geometryHeight;
+
+    // 5. Apply the calculated scale. Note the negative Y to flip the SVG.
+    geometry.scale(scale, -scale, scale);
+
+    // --- FIX END ---
+
+
+    // --- FIX: Manually generate correct UV coordinates ---
+    // This part is now done AFTER the geometry is correctly scaled.
+    const uvAttribute = geometry.attributes.uv;
+    const positionAttribute = geometry.attributes.position;
+    geometry.computeBoundingBox(); // Re-compute the bounding box for the scaled geometry
+    const scaledBbox = geometry.boundingBox;
+
+    for (let i = 0; i < positionAttribute.count; i++) {
+        const x = positionAttribute.getX(i);
+        const y = positionAttribute.getY(i);
+        
+        const u = (x - scaledBbox.min.x) / (scaledBbox.max.x - scaledBbox.min.x);
+        const v = (y - scaledBbox.min.y) / (scaledBbox.max.y - scaledBbox.min.y);
+
+        uvAttribute.setXY(i, u, v);
+    }
+    uvAttribute.needsUpdate = true;
+
+    // Load the texture and create the mesh inside the callback
+    const textureLoader = new THREE.TextureLoader();
+    textureLoader.load(
+        './dancepanda.png',
+
+        // This function runs only AFTER the texture is loaded
+        (texture) => {
+            console.log("Texture loaded successfully for mesh.");
+
+            const material = new THREE.MeshBasicMaterial({
+                map: texture,
+                transparent: true,
+                side: THREE.DoubleSide
+            });
+
+            characterMesh = new THREE.Mesh(geometry, material);
+            scene.add(characterMesh);
+            // --- YELLOW DIAGNOSTIC BOX ---
+            helper = new THREE.BoxHelper( characterMesh, 0xffff00 ); // Creates a yellow box
+            scene.add( helper );
+
+            // --- CALLBACK CHAIN ---
+            // Now that the mesh exists, we can create the skeleton and map it.
+            onMeshCreated(onMappingReady);
+        },
+        undefined,
+        (err) => { 
+            console.error('An error occurred loading the texture for the mesh:', err); 
+        }
+    );
+}
 
         function createPhysicsSkeleton(onSkeletonCreated) {
             physicsSkeleton = Matter.Composite.create();
@@ -220,9 +270,9 @@
 
                 // Find the three closest physics bodies to this vertex
                 const sortedBodies = physicsBodies.map(body => {
-                    // --- FIX: Scale the body's position to match the mesh's world units ---
-                    const bodyX = (body.position.x - window.innerWidth / 2) / PANDA_SCALE;
-                    const bodyY = -(body.position.y - window.innerHeight / 2) / PANDA_SCALE;
+                    // --- FIX: Convert body's pixel position to Three.js units correctly ---
+                    const bodyX = (body.position.x - window.innerWidth / 2) / pixelsPerThreeUnit;
+                    const bodyY = -(body.position.y - window.innerHeight / 2) / pixelsPerThreeUnit;
                     
                     const distance = Math.hypot(x - bodyX, y - bodyY);
                     return { body, distance };
@@ -271,6 +321,11 @@
         function animate() {
             requestAnimationFrame(animate);
 
+            // --- YELLOW DIAGNOSTIC BLOCK HELPER ---
+    if (helper) {
+        helper.update();
+    }
+
             if (characterMesh && vertexMapping.length > 0) {
                 const positionAttribute = characterMesh.geometry.attributes.position;
 
@@ -294,9 +349,9 @@
                         totalDy += dy * weight;
                     });
 
-                    // --- FIX: Convert displacement from pixels to Three.js units before applying ---
-                    const displacementX = totalDx / PANDA_SCALE;
-                    const displacementY = totalDy / PANDA_SCALE;
+                    // --- FIX: Convert displacement from pixels to Three.js units correctly ---
+                    const displacementX = totalDx / pixelsPerThreeUnit;66666666
+                    const displacementY = totalDy / pixelsPerThreeUnit;
 
                     // Apply the correctly scaled displacement to the vertex's original position
                     // The 'displacementY' is negated to convert from Matter.js screen space (Y-down) to Three.js world space (Y-up)
@@ -320,6 +375,9 @@
             camera.bottom = frustumSize / -2;
             camera.updateProjectionMatrix();
             renderer.setSize(window.innerWidth, window.innerHeight);
+            
+            // Recalculate the conversion factor on resize
+            pixelsPerThreeUnit = window.innerHeight / frustumSize;
         }
     </script>
 </body>
