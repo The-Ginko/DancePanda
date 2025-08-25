@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>The Working Panda — UVs locked + keyboard nudges</title>
+  <style>
+    body { margin: 0; background: #333; }
+    canvas { display: block; }
+    .hud {
+      position: fixed; left: 8px; bottom: 8px; color: #ddd; font: 12px/1.3 system-ui, sans-serif;
+      background: rgba(0,0,0,0.35); padding: 6px 8px; border-radius: 6px; white-space: pre;
+      pointer-events: none;
+    }
+  </style>
+</head>
+<body>
+  <div id="hud" class="hud"></div>
+
+  <!-- EXACT baseline scripts (three r128 + examples SVGLoader r128) -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/SVGLoader.js"></script>
+  <script src="./pandaPath.js"></script>
+
+  <script>
+    // --- 1) Scene / Camera / Renderer ---
+    const scene = new THREE.Scene();
+    const camera = new THREE.OrthographicCamera(
+      window.innerWidth / -2,
+      window.innerWidth /  2,
+      window.innerHeight /  2,
+      window.innerHeight / -2,
+      1, 1000
+    );
+    camera.position.z = 10;
+
+    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+    renderer.setPixelRatio(window.devicePixelRatio);
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    document.body.appendChild(renderer.domElement);
+
+    console.log('THREE revision:', THREE.REVISION);
+
+    // --- 2) Assets ---
+    const textureLoader = new THREE.TextureLoader();
+    const svgLoader = new THREE.SVGLoader();
+
+    const fullSvgString = `
+      <svg xmlns="http://www.w3.org/2000/svg"
+           viewBox="0 0 2048 2048"
+           width="2048" height="2048">
+        <path d="${svgPathData}" />
+      </svg>
+    `;
+
+    // UV tweak state (initialized to your locked values)
+    let scaleX = 0.9880;
+    let scaleY = 0.9870;
+    let offsetX = -2;
+    let offsetY = -42;
+
+    let mesh, wireMesh, geometry;
+    const hud = document.getElementById('hud');
+
+    function updateHUD() {
+      hud.textContent =
+        `UV scaleX: ${scaleX.toFixed(4)}   scaleY: ${scaleY.toFixed(4)}\n` +
+        `UV offsetX: ${offsetX.toFixed(1)} px   offsetY: ${offsetY.toFixed(1)} px\n` +
+        `Keys: ←/→ X offset, ↑/↓ Y offset, [ ] X scale, - = Y scale (Shift = x10), W: wireframe`;
+    }
+    updateHUD();
+
+    // --- 3) Build geometry + mesh with corrected UVs ---
+    textureLoader.load('./dancepanda.png', (texture) => {
+      // IMPORTANT: do NOT flipY here (baseline expects PNG upright without this line)
+      // texture.flipY = false;
+
+      const data = svgLoader.parse(fullSvgString);
+      const path = data.paths[0];
+      const shapes = THREE.SVGLoader.createShapes(path);
+      geometry = new THREE.ShapeGeometry(shapes);
+
+      // center and flip mask upright
+      geometry.center();
+      geometry.scale(1, -1, 1);
+
+      // Debug: SVG bounds vs PNG size
+      geometry.computeBoundingBox();
+      const bbox = geometry.boundingBox;
+      const size = new THREE.Vector3().subVectors(bbox.max, bbox.min);
+      console.log('SVG bbox min:', bbox.min, 'max:', bbox.max, 'size:', size);
+      console.log('PNG image size:', 2048, 2048);
+
+      // compute UVs (2048-space, with your scale+offset)
+      function applyUVs() {
+        const pos = geometry.attributes.position;
+        const uvs = [];
+        for (let i = 0; i < pos.count; i++) {
+          const x = pos.getX(i) + 1024;  // un-center to original SVG coordinates
+          const y = pos.getY(i) + 1024;
+          const u = (x + offsetX) / 2048 * scaleX;
+          const v = (y + offsetY) / 2048 * scaleY;
+          uvs.push(u, v);
+        }
+        geometry.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
+        geometry.attributes.uv.needsUpdate = true;
+      }
+      applyUVs();
+
+      // material + mesh
+      const material = new THREE.MeshBasicMaterial({
+        map: texture,
+        transparent: true,
+        side: THREE.DoubleSide
+      });
+      mesh = new THREE.Mesh(geometry, material);
+
+      // scale to viewport height
+      const scaleFactor = (window.innerHeight * 0.8) / size.y;
+      mesh.scale.setScalar(scaleFactor);
+      scene.add(mesh);
+
+      // wireframe overlay
+      const wireMat = new THREE.MeshBasicMaterial({ color: 0xff0000, wireframe: true });
+      wireMesh = new THREE.Mesh(geometry.clone(), wireMat);
+      wireMesh.visible = false;
+      mesh.add(wireMesh);
+
+      // Keyboard nudges (restored)
+      window.addEventListener('keydown', (e) => {
+        const fast = e.shiftKey ? 10 : 1;
+        let changed = false;
+
+        // Offsets in pixels
+        if (e.key === 'ArrowLeft')  { offsetX -= fast; changed = true; }
+        if (e.key === 'ArrowRight') { offsetX += fast; changed = true; }
+        if (e.key === 'ArrowUp')    { offsetY -= fast; changed = true; }
+        if (e.key === 'ArrowDown')  { offsetY += fast; changed = true; }
+
+        // Scale (dimensionless multipliers)
+        if (e.key === '[') { scaleX -= (e.shiftKey ? 0.01 : 0.001); changed = true; }
+        if (e.key === ']') { scaleX += (e.shiftKey ? 0.01 : 0.001); changed = true; }
+        if (e.key === '-') { scaleY -= (e.shiftKey ? 0.01 : 0.001); changed = true; }
+        if (e.key === '=') { scaleY += (e.shiftKey ? 0.01 : 0.001); changed = true; }
+
+        // Wireframe toggle
+        if (e.key.toLowerCase() === 'w') {
+          wireMesh.visible = !wireMesh.visible;
+        }
+
+        if (changed) {
+          applyUVs();
+          updateHUD();
+          console.log(`UV update → scaleX:${scaleX.toFixed(4)}, scaleY:${scaleY.toFixed(4)}, offsetX:${offsetX}, offsetY:${offsetY}`);
+        }
+      });
+    });
+
+    // --- 4) Resize handling ---
+    window.addEventListener('resize', () => {
+      camera.left   = window.innerWidth / -2;
+      camera.right  = window.innerWidth /  2;
+      camera.top    = window.innerHeight /  2;
+      camera.bottom = window.innerHeight / -2;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    });
+
+    // --- 5) Render loop ---
+    (function animate() {
+      requestAnimationFrame(animate);
+      renderer.render(scene, camera);
+    })();
+  </script>
+</body>
+</html>
